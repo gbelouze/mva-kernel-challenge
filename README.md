@@ -21,9 +21,6 @@ Project Organization
     ├── reports            <- Generated analysis as HTML, PDF, LaTeX, etc.
     │   └── figures        <- Generated graphics and figures to be used in reporting
     │
-    ├── requirements.txt   <- The requirements file for reproducing the analysis environment, e.g.
-    │                         generated with `pip freeze > requirements.txt`
-    │
     ├── setup.py           <- makes project pip installable (pip install -e .) so src can be imported
     └── src/challenge      <- Source code for use in this project.
         ├── __init__.py    <- Makes `challenge` a Python module
