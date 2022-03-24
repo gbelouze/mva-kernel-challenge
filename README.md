@@ -49,7 +49,7 @@ Project Organization
 Contribute
 ----------
 ```bash
-poetry install -E dev -E test
+pip install -e .
 ```
 
 --------
