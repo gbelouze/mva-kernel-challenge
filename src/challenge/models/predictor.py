@@ -4,7 +4,7 @@ import numpy as np
 from overrides import overrides  # type: ignore
 from scipy import optimize  # type: ignore
 
-from .kernel import Kernel
+from challenge.kernel import Kernel
 
 
 class Predictor(abc.ABC):
@@ -91,6 +91,7 @@ class KernelSVC(Predictor):
         self.C = C
         self.kernel = kernel
         self.alpha = None
+        self.beta_support = None
         self.support = None
         self.epsilon = epsilon
         self.norm_f = None
@@ -152,6 +153,7 @@ class KernelSVC(Predictor):
     @overrides(check_signature=False)
     def f(self, x: np.ndarray):
         """Separating function :maths:`f` evaluated at `x`"""
+        assert self.beta is not None, "Classifier needs to be fitted first"
         K = self.kernel.gram(self.X_support, x)
         return self.beta_support @ K
 

@@ -1,88 +1,89 @@
+import logging
 import tempfile
 from pathlib import Path
 from zipfile import ZipFile
 
-import challenge.data.io as io
-import challenge.data.paths as paths
 import click
 import numpy as np
 from kaggle.api.kaggle_api_extended import KaggleApi  # type: ignore
 from rich import print as rprint
 
+import challenge.data.io as io
+import challenge.data.paths as paths
 
-@click.group(invoke_without_command=True)
-@click.pass_context
-def cli(ctx):
-    """Regenerates data files."""
-    if ctx.invoked_subcommand is None:
-        ctx.invoke(clean)
-        ctx.invoke(download)
-        ctx.invoke(prepare)
-        ctx.invoke(val)
+log = logging.getLogger("challenge")
 
 
-@cli.command()
 def clean():
     """Removes all data files."""
     for file in paths.data_files:
         if file.exists():
             file.unlink()
-            rprint(f"[red]❌ removed[/] file [cyan]{file.name}[/]")
+            log.info(
+                f"[red]❌ removed[/] file [cyan]{io.repr(file)}[/]",
+                extra={"markup": True},
+            )
 
 
-@cli.command()
 def download():
     """Downloads data files from Kaggle."""
     download_base = "mva-mash-kernel-methods-2021-2022"
 
     api = KaggleApi()
     api.authenticate()
-    rprint("[green]🔑 authentification[/] successful")
+    log.info("[green]🔑 authentification successful[/]", extra={"markup": True})
 
     with tempfile.TemporaryDirectory() as _temp_dir:
         temp_dir = Path(_temp_dir)
         try:
             api.competition_download_files(download_base, path=temp_dir)
-            rprint(
-                f"[green]🔗 downloaded[/] zip archive from Kaggle [cyan]{download_base}[/]"
+            log.info(
+                f"[green]🔗 downloaded[/] zip archive from Kaggle [cyan]{download_base}[/]",
+                extra={"markup": True},
             )
         except Exception:
-            rprint(f"[red]Could not download from Kaggle [cyan]{download_base}[/]")
+            log.error(
+                f"[red]Could not download from Kaggle [cyan]{download_base}[/]",
+                extra={"markup": True},
+            )
             raise
 
         with ZipFile(temp_dir / f"{download_base}.zip") as zip_file:
             zip_file.extractall(paths.data_dir)
-            rprint(f"[green]📦 extracted[/] archive to [cyan]{paths.data_dir}[/]")
+            log.info(
+                f"[green]📦 extracted[/] archive to [cyan]{io.repr(paths.data_dir)}[/]",
+                extra={"markup": True},
+            )
 
 
-@cli.command()
 def prepare():
     """Data files pre-processing."""
     for file in paths.x_downloaded:
         if not file.exists():
-            rprint("[red]Missing files[/] try downloading them again.")
+            log.error(
+                f"[red]Missing files[/] [cyan]{io.repr(file)}[/] try downloading them again.",
+                extra={"markup": True},
+            )
             raise FileNotFoundError(file)
 
         # array has one spurious dimension because of trailing commas
         array = np.genfromtxt(file, delimiter=",", usecols=range(3072))
-        io.xdump(array, out=file)
-        rprint(f"[green]🧹 cleaned[/] data file [cyan]{file.name}[/]")
+        io.dumpx(array, out=file)
+        log.info(
+            f"[green]🧹 cleaned[/] data file [cyan]{io.repr(file)}[/]",
+            extra={"markup": True},
+        )
 
 
-@cli.command()
-def val():
+def split(proportion):
     """Splits train set in train/val."""
     data = io.xload(paths.x_train)
-    len_train = (len(data) * 80) // 100
-    io.xdump(data[:len_train], out=paths.x_train)
-    io.xdump(data[len_train:], out=paths.x_val)
-    rprint("[green]✂️ Split[/] X into train/val datasets")
+    len_train = (len(data) * proportion) // 100
+    io.dumpx(data[:len_train], out=paths.x_train)
+    io.dumpx(data[len_train:], out=paths.x_val)
+    log.info("[green]✂️ Split[/] X into train/val datasets", extra={"markup": True})
 
     data = io.yload(paths.y_train)
-    io.ydump(data[:len_train], out=paths.y_train)
-    io.ydump(data[len_train:], out=paths.y_val)
-    rprint("[green]✂️ Split[/] Y into train/val datasets")
-
-
-if __name__ == "__main__":
-    cli()
+    io.dumpy(data[:len_train], out=paths.y_train)
+    io.dumpy(data[len_train:], out=paths.y_val)
+    log.info("[green]✂️ Split[/] Y into train/val datasets", extra={"markup": True})

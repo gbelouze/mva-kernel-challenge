@@ -1,29 +1,58 @@
+import logging
 from pathlib import Path
 
-import challenge.data.paths as paths
 import numpy as np
 import pandas as pd  # type: ignore
 
+import challenge.data.paths as paths
 
-def xload(path: Path) -> np.ndarray:
+log = logging.getLogger("challenge")
+
+
+def repr(path: Path):
+    """Path name relative to working directory"""
+    cwd = Path.cwd()
+    path = path.resolve()
+    if path.is_relative_to(cwd):
+        return str(path.relative_to(cwd))
+    return path
+
+
+def loadx(path: Path) -> np.ndarray:
     """Loads an image dataset"""
     X = np.genfromtxt(path, delimiter=",")
     assert (
         X.shape[1] == 3072
     ), "Did you prepare the data files ? (see challenge.make.prepare)"
+    log.info(f"X file loaded from [magenta]{repr(path)}[/]", extra={"markup": True})
     return X
 
 
-def xdump(x: np.ndarray, out: Path):
-    np.savetxt(out, x, delimiter=",")
-
-
-def yload(path: Path) -> np.ndarray:
+def loady(path: Path) -> np.ndarray:
     """Loads a label dataset"""
+    log.info(f"Y file loaded from [magenta]{repr(path)}[/]", extra={"markup": True})
     return np.genfromtxt(path, delimiter=",", skip_header=1, usecols=1)
 
 
-def ydump(y: np.ndarray, out: Path = paths.y_test):
+def overwrite_guard(func):
+    def wrapped(path: Path, *args, overwrite=False, **kwargs):
+        if path.exists() and not overwrite:
+            log.error(
+                f"File already exists [magenta]{repr(path)}[/]", extra={"markup": True}
+            )
+            raise FileExistsError
+        return func(path, *args, **kwargs)
+
+    return wrapped
+
+
+@overwrite_guard
+def dumpx(out: Path, x: np.ndarray):
+    np.savetxt(out, x, delimiter=",")
+
+
+@overwrite_guard
+def dumpy(out: Path, y: np.ndarray):
     """Writes a label dataset"""
     df = pd.DataFrame({"Prediction": y})
     df.index += 1
