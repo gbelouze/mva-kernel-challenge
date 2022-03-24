@@ -1,14 +1,19 @@
 import abc
+import logging
 
 import numpy as np
 from overrides import overrides  # type: ignore
 from scipy import optimize  # type: ignore
 
-from challenge.kernel import Kernel
+from challenge.models.kernel import Kernel
+
+log = logging.getLogger("challenge")
 
 
 class Predictor(abc.ABC):
     """Very general blue print for an implementation of a predictor."""
+
+    fitted = False
 
     @abc.abstractmethod
     def fit(self, X: np.ndarray, y: np.ndarray):
@@ -69,10 +74,11 @@ class KernelRidgeRegressor(Predictor):
         n = len(y)
         self.beta = np.linalg.solve(K + self.lambd * n * np.identity(n), y)
         self.X_fit = X
+        self.fitted = True
 
     @overrides(check_signature=False)
     def f(self, X):
-        assert self.beta is not None, "Classifier needs to be fitted first"
+        assert self.fitted, "Classifier needs to be fitted first"
         K = self.kernel.gram(X, self.X_fit)
         return K @ self.beta
 
@@ -120,9 +126,7 @@ class KernelSVC(Predictor):
         def inequality_constraint(alpha):
             return np.concatenate((alpha, self.C - alpha), axis=0)
 
-        _jacobian_ineq_cons = np.concatenate(
-            (np.diag(np.ones(N)), -np.diag(np.ones(N))), axis=0
-        )
+        _jacobian_ineq_cons = np.concatenate((np.diag(np.ones(N)), -np.diag(np.ones(N))), axis=0)
 
         def jacobian_ineq_cons(alpha):
             return _jacobian_ineq_cons
@@ -146,14 +150,14 @@ class KernelSVC(Predictor):
 
         self.beta_support = self.alpha[self.alpha > 0] * y[self.alpha > 0]
         self.X_support = X[self.alpha > 0]
-        self.b = np.mean(
-            (1 / y - K @ (y * self.alpha))[(0 < self.alpha) & (self.alpha < self.C)]
-        )
+        self.b = np.mean((1 / y - K @ (y * self.alpha))[(0 < self.alpha) & (self.alpha < self.C)])
+
+        self.fitted = True
 
     @overrides(check_signature=False)
     def f(self, x: np.ndarray):
         """Separating function :maths:`f` evaluated at `x`"""
-        assert self.beta is not None, "Classifier needs to be fitted first"
+        assert self.fitted, "Classifier needs to be fitted first"
         K = self.kernel.gram(self.X_support, x)
         return self.beta_support @ K
 

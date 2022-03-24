@@ -1,8 +1,11 @@
 import abc
+import logging
 
 import numpy as np
 from numpy.typing import ArrayLike
 from overrides import overrides  # type: ignore
+
+log = logging.getLogger("challenge")
 
 
 class Kernel(abc.ABC):
@@ -61,7 +64,9 @@ class RBF(Kernel):
             norm = np.sum((X - Y[None, :]) ** 2, axis=1)
         else:
             norm = np.sum((X[..., :, None, :] - Y[..., None, :, :]) ** 2, axis=-1)
-        return np.exp(-norm / (2 * self.sigma**2))
+        ret = np.exp(-norm / (2 * self.sigma**2))
+        log.debug(f"Computed Gram matrix for RBF Kernel of size {ret.size}", extra={"markup": True})
+        return ret
 
 
 class Linear(Kernel):
@@ -77,10 +82,12 @@ class Linear(Kernel):
         Y = np.array(Y)
 
         if X.ndim == 1 and Y.ndim == 1:
-            return X * Y
+            ret = X * Y
         elif X.ndim == 1:
-            return Y @ X
+            ret = Y @ X
         elif Y.ndim == 1:
-            return X @ Y
+            ret = X @ Y
         else:
-            return np.einsum("...id,...jd->...ij", X, Y)
+            ret = np.einsum("...id,...jd->...ij", X, Y)
+        log.debug(f"Computed Gram matrix of Linear Kernel of size {ret.size}", extra={"markup": True})
+        return ret
