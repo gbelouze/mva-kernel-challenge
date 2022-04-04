@@ -30,7 +30,8 @@ dependencies = [
     "pandas",
     "ipykernel",
     "overrides",
-    "scipy"
+    "scipy",
+    "pysift"
 ]
 
 [project.optional-dependencies]
