@@ -2,6 +2,7 @@ import abc
 import logging
 
 import numpy as np
+import tqdm
 from overrides import overrides  # type: ignore
 from scipy import optimize  # type: ignore
 
@@ -14,6 +15,9 @@ class Predictor(abc.ABC):
     """Very general blue print for an implementation of a predictor."""
 
     fitted = False
+
+    def __call__(self, *args, **kwargs):
+        return self.predict(*args, **kwargs)
 
     @abc.abstractmethod
     def fit(self, X: np.ndarray, y: np.ndarray):
@@ -103,7 +107,13 @@ class KernelSVC(Predictor):
         self.norm_f = None
 
     @overrides(check_signature=False)
-    def fit(self, X, y):
+    def fit(self, X, y, warn_unbalance=True):
+        assert y.dtype == np.bool_, "Y argument must be a boolean array"
+        y = 2 * y - 1
+
+        if warn_unbalance and np.abs(y.sum() / len(y)) > 0.15:
+            log.warn("Y vectors contains unbalanced labels")
+
         K = self.kernel.gram(X, X)
         YKY = np.einsum("ij,i,j->ij", K, y, y)
         N = len(y)
@@ -159,9 +169,97 @@ class KernelSVC(Predictor):
         """Separating function :maths:`f` evaluated at `x`"""
         assert self.fitted, "Classifier needs to be fitted first"
         K = self.kernel.gram(self.X_support, x)
-        return self.beta_support @ K
+        return self.beta_support @ K + self.b
 
     @overrides(check_signature=False)
     def predict(self, X: np.ndarray):
         """Predict y values in {-1, 1}"""
-        return 2 * (self.f(X) + self.b > 0) - 1
+        return self.f(X) > 0
+
+
+class OneVsAll(Predictor):
+    """Multi-class predictor"""
+
+    def __init__(self, get_predictor):
+        self.get_predictor = get_predictor
+        self.predictors = {}
+        self.classes = set()
+        self.idx_to_cl = {}
+
+    @overrides(check_signature=False)
+    def fit(self, X, y):
+        self.fitted = True
+        self.classes = set(y)
+        self.idx_to_cl = {i: cl for i, cl in enumerate(self.classes)}
+        for idx, cl in tqdm.tqdm(
+            self.idx_to_cl.items(), desc="Computing all 1 v All predictors", total=len(self.classes)
+        ):
+            predictor = self.get_predictor()
+            predictor.fit(X, y == cl)
+            self.predictors[idx] = predictor
+
+    @overrides(check_signature=False)
+    def f(self, X: np.ndarray):
+        assert self.fitted, "Classifier needs to be fitted first"
+        return np.stack([pred.f(X) for pred in self.predictors.values()], axis=0)
+
+    @overrides(check_signature=False)
+    def predict(self, X: np.ndarray):
+        """Predict y values"""
+        if X.ndim == 1:
+            X = X[None, :]
+        return np.vectorize(lambda idx: self.idx_to_cl[idx])(np.argmax(self.f(X), axis=0))
+
+
+class OneVsOne(Predictor):
+    """Multi-class predictor"""
+
+    def __init__(self, get_predictor):
+        self.get_predictor = get_predictor
+        self.classifiers = {}
+        self.classes = set()
+        self.idx_to_cl = {}
+
+    @overrides(check_signature=False)
+    def fit(self, X, y):
+        self.fitted = True
+        self.classes = set(y)
+        self.idx_to_cl = {i: cl for i, cl in enumerate(self.classes)}
+        for i in tqdm.trange(len(self.classes) - 1, desc="Computing all 1v1 classifiers", position=0):
+            for j in tqdm.trange(i + 1, len(self.classes), desc=f"Involving {i}", position=1, leave=False):
+                cl1, cl2 = self.idx_to_cl[i], self.idx_to_cl[j]
+                select = (y == cl1) | (y == cl2)
+                X_ = X[select]
+                y_ = y[select]
+                predictor = self.get_predictor()
+                predictor.fit(X_, y_ == cl1, warn_unbalance=False)
+                self.classifiers[(i, j)] = predictor
+
+    @overrides(check_signature=False)
+    def f(self, X: np.ndarray):
+        assert self.fitted, "Classifier needs to be fitted first"
+        if X.ndim == 1:
+            X = X[None, :]
+        shape = X.shape
+        X = X.reshape(-1, shape[-1])
+
+        Y = np.empty(len(X))
+        for x_idx, x in tqdm.tqdm(
+            enumerate(X),
+            total=len(X),
+        ):
+            count_wins = [0 for _ in range(len(self.classes))]
+            for (i, j), classifier in self.classifiers.items():
+                y = classifier(x)
+                if y.sum() > (1 - y).sum():
+                    count_wins[i] += 1
+                else:
+                    count_wins[j] += 1
+            cl = self.idx_to_cl[np.argmax(count_wins)]
+            Y[x_idx] = cl
+        return Y
+
+    @overrides(check_signature=False)
+    def predict(self, X: np.ndarray):
+        """Predict y values"""
+        return self.f(X)
