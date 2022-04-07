@@ -6,18 +6,20 @@ from rich.logging import RichHandler
 
 import challenge.data.make as data_make
 
-FORMAT = "%(message)s"
-logging.basicConfig(
-    level="NOTSET", format=FORMAT, datefmt="[%X]", handlers=[RichHandler()]
-)
-
 log = logging.getLogger("challenge")
+
+
+def setup_log():
+    FORMAT = "%(message)s"
+    logging.basicConfig(level="NOTSET", format=FORMAT, datefmt="[%X]", handlers=[RichHandler()])
+    log.setLevel(logging.INFO)
 
 
 @click.group()
 @click.option("-v", "--verbose", is_flag=True)
 @click.option("--quiet/--no-quiet", default=False)
 def main(verbose, quiet):
+    setup_log()
     if verbose:
         log.setLevel(logging.DEBUG)
     else:
