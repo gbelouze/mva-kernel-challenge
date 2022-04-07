@@ -63,9 +63,13 @@ class RBF(Kernel):
         elif Y.ndim == 1:
             norm = np.sum((X - Y[None, :]) ** 2, axis=1)
         else:
-            norm = np.sum((X[..., :, None, :] - Y[..., None, :, :]) ** 2, axis=-1)
+            normX = np.sum(X**2, axis=-1)
+            normY = np.sum(Y**2, axis=-1)
+            XY = np.einsum("...id,...jd->...ij", X, Y)
+            norm = normX[..., :, None] + normY[..., None, :] - 2 * XY
         ret = np.exp(-norm / (2 * self.sigma**2))
-        log.debug(f"Computed Gram matrix for RBF Kernel of size {ret.size}", extra={"markup": True})
+        shape = f"{ret.shape[0]}" if ret.ndim == 1 else f"{ret.shape[-2]}x{ret.shape[-1]}"
+        log.debug(f"Computed Gram matrix for RBF Kernel of size [bold cyan]{shape}[/]", extra={"markup": True})
         return ret
 
 
